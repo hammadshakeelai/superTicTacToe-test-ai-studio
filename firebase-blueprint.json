@@ -1,0 +1,120 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user profile in the system.",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "description": "The user's display name." },
+        "elo_rating": { "type": "number", "description": "The user's Elo rating." },
+        "avg_accuracy": { "type": "number", "description": "The user's average move accuracy." },
+        "marker_theme": { "type": "string", "description": "The user's preferred marker theme.", "enum": ["standard", "retro", "neon", "minimalist"] },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["username", "elo_rating", "avg_accuracy", "marker_theme", "created_at"]
+    },
+    "Friendship": {
+      "title": "Friendship",
+      "description": "A friendship relationship between two users.",
+      "type": "object",
+      "properties": {
+        "user_id_1": { "type": "string" },
+        "user_id_2": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted"] }
+      },
+      "required": ["user_id_1", "user_id_2", "status"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "A game match.",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["waiting", "in_progress", "completed", "abandoned"] },
+        "winner_id": { "type": "string" },
+        "started_at": { "type": "string", "format": "date-time" },
+        "ended_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["status", "started_at"]
+    },
+    "MatchPlayer": {
+      "title": "MatchPlayer",
+      "description": "A player's participation in a match.",
+      "type": "object",
+      "properties": {
+        "match_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "player_role": { "type": "string", "enum": ["X", "O"] },
+        "elo_change": { "type": "number" },
+        "accuracy_score": { "type": "number" }
+      },
+      "required": ["match_id", "user_id", "player_role"]
+    },
+    "Move": {
+      "title": "Move",
+      "description": "A move made in a match.",
+      "type": "object",
+      "properties": {
+        "match_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "move_number": { "type": "number" },
+        "super_grid_index": { "type": "number" },
+        "sub_grid_index": { "type": "number" },
+        "heuristic_delta": { "type": "number" }
+      },
+      "required": ["match_id", "user_id", "move_number", "super_grid_index", "sub_grid_index", "heuristic_delta"]
+    },
+    "ChatRoom": {
+      "title": "ChatRoom",
+      "description": "A chat room.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["global", "direct", "match"] },
+        "participants": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["type", "participants"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A chat message.",
+      "type": "object",
+      "properties": {
+        "room_id": { "type": "string" },
+        "sender_id": { "type": "string" },
+        "sender_name": { "type": "string" },
+        "content": { "type": "string" },
+        "sent_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["room_id", "sender_id", "sender_name", "content", "sent_at"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles."
+    },
+    "/friendships/{friendshipId}": {
+      "schema": { "$ref": "#/entities/Friendship" },
+      "description": "Friendships between users."
+    },
+    "/matches/{matchId}": {
+      "schema": { "$ref": "#/entities/Match" },
+      "description": "Game matches."
+    },
+    "/match_players/{matchPlayerId}": {
+      "schema": { "$ref": "#/entities/MatchPlayer" },
+      "description": "Players in matches."
+    },
+    "/moves/{moveId}": {
+      "schema": { "$ref": "#/entities/Move" },
+      "description": "Moves in matches."
+    },
+    "/chat_rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/ChatRoom" },
+      "description": "Chat rooms."
+    },
+    "/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Chat messages."
+    }
+  }
+}
