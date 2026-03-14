@@ -4,7 +4,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { GameState, Move, applyMove, createInitialState } from './src/gameLogic.js';
-import { evaluateMoveAccuracy } from './src/aiEvaluator.js';
+import { evaluateMoveAccuracy, getBestMove, getEvaluation } from './src/aiEvaluator.js';
 
 async function startServer() {
   const app = express();
@@ -20,58 +20,136 @@ async function startServer() {
     res.json({ status: 'ok' });
   });
 
-  // matchId -> { state: GameState, players: { X: string, O: string } }
-  const activeGames = new Map<string, { state: GameState, players: { X: string, O: string } }>();
+  // matchId -> { state: GameState, players: { X: string, O: string }, isBotMatch?: boolean, botDifficulty?: number }
+  const activeGames = new Map<string, { state: GameState, players: { X: string, O: string }, isBotMatch?: boolean, botDifficulty?: number }>();
 
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
-    socket.on('create_match', ({ matchId, userId }) => {
+    socket.on('create_match', ({ matchId, userId, isBotMatch, botDifficulty }) => {
       activeGames.set(matchId, {
         state: createInitialState(),
-        players: { X: userId, O: '' }
+        players: { X: userId, O: isBotMatch ? 'BOT' : '' },
+        isBotMatch,
+        botDifficulty: botDifficulty || 3
       });
       socket.join(matchId);
-      console.log(`Match ${matchId} created by ${userId}`);
+      console.log(`Match ${matchId} created by ${userId} (Bot: ${isBotMatch})`);
+      
+      // If it's a bot match, emit initial state immediately
+      if (isBotMatch) {
+        io.to(matchId).emit('match_state', activeGames.get(matchId)!.state);
+      }
     });
 
     socket.on('join_match', ({ matchId, userId }) => {
-      const game = activeGames.get(matchId);
-      if (game) {
+      let game = activeGames.get(matchId);
+      if (!game) {
+        // If match doesn't exist (e.g. server restarted or friend joined first), create it
+        // We assume it's a regular PvP match if it wasn't created explicitly as a bot match
+        const isBotMatch = matchId.startsWith('bot_');
+        game = {
+          state: createInitialState(),
+          players: { X: userId, O: isBotMatch ? 'BOT' : '' },
+          isBotMatch,
+          botDifficulty: 3
+        };
+        activeGames.set(matchId, game);
+        console.log(`Match ${matchId} auto-created by ${userId}`);
+      } else {
         if (!game.players.O && game.players.X !== userId) {
           game.players.O = userId;
         }
-        socket.join(matchId);
-        io.to(matchId).emit('match_state', game.state);
-        console.log(`User ${userId} joined match ${matchId}`);
       }
+      socket.join(matchId);
+      const role = game.players.X === userId ? 'X' : (game.players.O === userId ? 'O' : 'Spectator');
+      socket.emit('match_joined', { state: game.state, role });
+      io.to(matchId).emit('match_state', game.state);
+      console.log(`User ${userId} joined match ${matchId} as ${role}`);
     });
+
+    const handleBotMove = async (matchId: string) => {
+      const game = activeGames.get(matchId);
+      if (!game || !game.isBotMatch || game.state.winner) return;
+
+      // Bot plays as O
+      if (game.state.currentPlayer === 'O') {
+        setTimeout(() => {
+          const botMove = getBestMove(game.state, game.botDifficulty);
+          if (botMove) {
+            const stateBefore = game.state;
+            const accuracy = evaluateMoveAccuracy(stateBefore, botMove);
+            const newState = applyMove(stateBefore, botMove);
+            game.state = newState;
+            
+            io.to(matchId).emit('move_made', { 
+              move: botMove, 
+              state: newState, 
+              accuracy,
+              evaluation: getEvaluation(newState)
+            });
+
+            if (newState.winner) {
+              io.to(matchId).emit('game_over', { winner: newState.winner });
+              activeGames.delete(matchId);
+            }
+          }
+        }, 500); // Small delay for realism
+      }
+    };
 
     socket.on('make_move', async (data) => {
       const { matchId, move } = data;
       const game = activeGames.get(matchId);
       if (game) {
+        // Prevent human from playing bot's turn
+        if (game.isBotMatch && game.state.currentPlayer === 'O') return;
+
         const stateBefore = game.state;
         
-        // Evaluate move accuracy in background (non-blocking for basic response)
+        // Evaluate move accuracy in background
         const accuracy = evaluateMoveAccuracy(stateBefore, move);
         
         const newState = applyMove(stateBefore, move);
         game.state = newState;
         
-        io.to(matchId).emit('move_made', { move, state: newState, accuracy });
+        io.to(matchId).emit('move_made', { 
+          move, 
+          state: newState, 
+          accuracy,
+          evaluation: getEvaluation(newState)
+        });
 
         if (newState.winner) {
           io.to(matchId).emit('game_over', { winner: newState.winner });
           activeGames.delete(matchId);
-          // Here we would save the match result to the database
+        } else if (game.isBotMatch) {
+          handleBotMove(matchId);
+        }
+      }
+    });
+
+    socket.on('request_hint', (data) => {
+      const { matchId } = data;
+      const game = activeGames.get(matchId);
+      if (game && !game.state.winner) {
+        // Calculate hint based on current state
+        const hintMove = getBestMove(game.state, 3);
+        if (hintMove) {
+          socket.emit('receive_hint', hintMove);
         }
       }
     });
 
     socket.on('send_message', (data) => {
-      const { roomId, message } = data;
-      socket.to(roomId).emit('receive_message', message);
+      const { roomId, message, sender, timestamp } = data;
+      // Broadcast to everyone in the room (including sender to confirm)
+      io.to(roomId).emit('receive_message', { sender, message, timestamp });
+    });
+
+    socket.on('global_chat_send', (data) => {
+      const { message, sender, timestamp } = data;
+      io.emit('global_chat_receive', { sender, message, timestamp });
     });
 
     socket.on('disconnect', () => {

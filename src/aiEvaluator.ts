@@ -71,6 +71,46 @@ export function minimax(state: GameState, depth: number, alpha: number, beta: nu
   }
 }
 
+export function getBestMove(state: GameState, depth: number = MAX_DEPTH): Move | null {
+  const player = state.currentPlayer;
+  const validMoves = getValidMoves(state);
+  if (validMoves.length === 0) return null;
+
+  let bestScore = -Infinity;
+  let bestMoves: Move[] = [];
+
+  for (const move of validMoves) {
+    const newState = applyMove(state, move);
+    const score = minimax(newState, depth - 1, -Infinity, Infinity, false, player);
+    if (score > bestScore) {
+      bestScore = score;
+      bestMoves = [move];
+    } else if (score === bestScore) {
+      bestMoves.push(move);
+    }
+  }
+
+  // Pick a random best move to add variety
+  if (bestMoves.length > 0) {
+    return bestMoves[Math.floor(Math.random() * bestMoves.length)];
+  }
+  return validMoves[0];
+}
+
+export function getEvaluation(state: GameState): number {
+  // Returns evaluation from X's perspective
+  if (state.winner === 'X') return 1000;
+  if (state.winner === 'O') return -1000;
+  if (state.winner === 'Draw') return 0;
+
+  let score = 0;
+  for (let i = 0; i < 9; i++) {
+    if (state.subBoardWinners[i] === 'X') score += 10;
+    else if (state.subBoardWinners[i] === 'O') score -= 10;
+  }
+  return score;
+}
+
 export function evaluateMoveAccuracy(stateBeforeMove: GameState, actualMove: Move): { bestMove: Move | null, heuristicDelta: number, label: string } {
   const player = stateBeforeMove.currentPlayer;
   const validMoves = getValidMoves(stateBeforeMove);
