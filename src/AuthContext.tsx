@@ -25,29 +25,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      setLoading(false); // Unblock the UI immediately once auth state is known
+
       if (currentUser) {
-        const docRef = doc(db, 'users', currentUser.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setProfile(docSnap.data() as UserProfile);
-        } else {
-          // Create default profile
-          const newProfile: UserProfile = {
-            username: currentUser.displayName || 'Player',
-            elo_rating: 1200,
-            avg_accuracy: 0,
-            marker_theme: 'standard',
-            created_at: new Date().toISOString(),
-          };
-          await setDoc(docRef, newProfile);
-          setProfile(newProfile);
-        }
+        // Fetch profile asynchronously without blocking
+        const fetchProfile = async () => {
+          try {
+            const docRef = doc(db, 'users', currentUser.uid);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+              setProfile(docSnap.data() as UserProfile);
+            } else {
+              // Create default profile
+              const newProfile: UserProfile = {
+                username: currentUser.displayName || 'Player',
+                elo_rating: 1200,
+                avg_accuracy: 0,
+                marker_theme: 'standard',
+                created_at: new Date().toISOString(),
+              };
+              await setDoc(docRef, newProfile);
+              setProfile(newProfile);
+            }
+          } catch (error: any) {
+            if (error?.message?.includes('client is offline')) {
+              console.warn("⚠️ Firestore is offline or not yet created. Using a local fallback profile. To fix this, please create your Firestore database in the Firebase Console.");
+            } else {
+              console.error("Error fetching/creating user profile:", error);
+            }
+            // If Firestore is offline or fails, provide a fallback profile so the app still works
+            setProfile({
+              username: currentUser.displayName || 'Player',
+              elo_rating: 1200,
+              avg_accuracy: 0,
+              marker_theme: 'standard',
+              created_at: new Date().toISOString(),
+            });
+          }
+        };
+        fetchProfile();
       } else {
         setProfile(null);
       }
-      setLoading(false);
     });
 
     return unsubscribe;

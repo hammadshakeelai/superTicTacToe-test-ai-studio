@@ -13,16 +13,23 @@ export default function LobbyPage() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(
-      collection(db, 'match_players'),
-      where('user_id', '==', user.uid),
-      orderBy('started_at', 'desc'),
-      limit(10)
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setMatches(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    return unsubscribe;
+    try {
+      const q = query(
+        collection(db, 'match_players'),
+        where('user_id', '==', user.uid),
+        orderBy('started_at', 'desc'),
+        limit(10)
+      );
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        setMatches(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      }, (error) => {
+        console.error("Error fetching match history:", error);
+        // Don't crash the UI, just leave matches empty
+      });
+      return unsubscribe;
+    } catch (error) {
+      console.error("Error setting up match history listener:", error);
+    }
   }, [user]);
 
   const createPrivateMatch = () => {
