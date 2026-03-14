@@ -21,7 +21,12 @@ export default function GameRoomPage() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [playerRole, setPlayerRole] = useState<'X' | 'O' | 'Spectator' | null>(null);
   const [accuracyLog, setAccuracyLog] = useState<{ move: Move, label: string, delta: number }[]>([]);
+  const accuracyLogRef = useRef<{ move: Move, label: string, delta: number }[]>([]);
   
+  useEffect(() => {
+    accuracyLogRef.current = accuracyLog;
+  }, [accuracyLog]);
+
   const [chatMessages, setChatMessages] = useState<{sender: string, message: string, timestamp: number}[]>([]);
   const [chatInput, setChatInput] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -65,15 +70,100 @@ export default function GameRoomPage() {
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     });
 
-    newSocket.on('game_over', ({ winner }) => {
+    newSocket.on('draw_offered', ({ by }) => {
+      if (playerRole !== 'Spectator' && playerRole !== by) {
+        if (window.confirm("Your opponent offered a draw. Do you accept?")) {
+          newSocket.emit('accept_draw', { matchId });
+        } else {
+          newSocket.emit('decline_draw', { matchId });
+        }
+      }
+    });
+
+    newSocket.on('draw_declined', () => {
+      alert("Your opponent declined the draw offer.");
+    });
+
+    newSocket.on('game_over', async ({ winner, matchDetails }) => {
+      if (user && profile && matchDetails) {
+        try {
+          const { doc, getDoc, setDoc, updateDoc, collection, increment } = await import('firebase/firestore');
+          const { db } = await import('../firebase');
+          
+          // Update own stats
+          const isPlayerX = matchDetails.player_x === user.uid;
+          const isPlayerO = matchDetails.player_o === user.uid;
+          
+          if (isPlayerX || isPlayerO) {
+            const isWinner = (isPlayerX && winner === 'X') || (isPlayerO && winner === 'O');
+            const isDraw = winner === 'Draw';
+            const isLoser = !isWinner && !isDraw;
+            
+            // Calculate new Elo (simplified)
+            let eloChange = isWinner ? 15 : isDraw ? 0 : -15;
+            const newElo = Math.max(0, profile.elo_rating + eloChange);
+            
+            // Calculate Accuracy
+            let myAccuracy = 0;
+            const myRole = isPlayerX ? 'X' : 'O';
+            const myMoves = accuracyLogRef.current.filter(log => log.move.player === myRole);
+            if (myMoves.length > 0) {
+              const totalDelta = myMoves.reduce((sum, log) => sum + Math.max(0, 1000 - Math.abs(log.delta)), 0);
+              myAccuracy = Math.round((totalDelta / (myMoves.length * 1000)) * 100);
+            }
+
+            const newAvgAccuracy = Math.round(((profile.avg_accuracy * profile.matches_played) + myAccuracy) / (profile.matches_played + 1));
+
+            await updateDoc(doc(db, 'users', user.uid), {
+              matches_played: increment(1),
+              wins: increment(isWinner ? 1 : 0),
+              losses: increment(isLoser ? 1 : 0),
+              draws: increment(isDraw ? 1 : 0),
+              elo_rating: newElo,
+              avg_accuracy: newAvgAccuracy
+            });
+
+            // Only player X saves the match record to avoid duplicates
+            if (isPlayerX) {
+              let playerOName = 'Bot';
+              if (!matchDetails.isBotMatch && matchDetails.player_o) {
+                const oDoc = await getDoc(doc(db, 'users', matchDetails.player_o));
+                if (oDoc.exists()) {
+                  playerOName = oDoc.data().username;
+                } else {
+                  playerOName = 'Unknown';
+                }
+              }
+
+              await setDoc(doc(collection(db, 'match_records'), matchId), {
+                player_x: matchDetails.player_x,
+                player_o: matchDetails.player_o,
+                player_x_name: profile.username || 'Unknown',
+                player_o_name: playerOName,
+                winner: winner === 'X' ? matchDetails.player_x : (winner === 'O' ? matchDetails.player_o : 'Draw'),
+                status: 'completed',
+                moves_count: matchDetails.moves_count,
+                created_at: Date.now()
+              });
+            }
+
+            alert(`Game Over! Winner: ${winner}`);
+            navigate(`/summary/${matchId}`, { state: { eloChange, newElo, isWinner, isDraw, accuracy: myAccuracy } });
+            return;
+          }
+        } catch (error) {
+          console.error("Error saving match record or stats:", error);
+        }
+      }
+      
       alert(`Game Over! Winner: ${winner}`);
-      navigate(`/lobby`);
+      navigate(`/summary/${matchId}`);
     });
 
     return () => {
       newSocket.disconnect();
     };
-  }, [matchId, user]);
+  }, [matchId, user, profile]);
 
   const handleCellClick = (superIdx: number, subIdx: number) => {
     if (!socket || !gameState || !playerRole) return;
@@ -101,10 +191,14 @@ export default function GameRoomPage() {
   };
 
   const handleResign = () => {
-    if (window.confirm("Are you sure you want to resign?")) {
-      alert("You resigned.");
-      navigate('/lobby');
-    }
+    if (!socket || !playerRole || playerRole === 'Spectator') return;
+    socket.emit('resign', { matchId, player: playerRole });
+  };
+
+  const handleOfferDraw = () => {
+    if (!socket || !playerRole || playerRole === 'Spectator') return;
+    socket.emit('offer_draw', { matchId, player: playerRole });
+    alert("Draw offer sent.");
   };
 
   if (!gameState) return <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">Connecting to match...</div>;
@@ -152,7 +246,7 @@ export default function GameRoomPage() {
           <button onClick={handleResign} className="px-3 py-1 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded border border-red-500/20 text-sm font-medium transition-colors">
             Resign
           </button>
-          <button onClick={() => alert("Draw offer sent.")} className="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded border border-slate-600 text-sm font-medium transition-colors">
+          <button onClick={handleOfferDraw} className="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded border border-slate-600 text-sm font-medium transition-colors">
             Offer Draw
           </button>
           <div className="flex items-center gap-2">

@@ -1,81 +1,72 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from './firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 
-interface UserProfile {
+export interface UserProfile {
   username: string;
+  email: string;
   elo_rating: number;
   avg_accuracy: number;
-  marker_theme: string;
-  created_at: string;
+  matches_played: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  created_at: number;
 }
 
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
+  profileLoading: boolean;
 }
 
-const AuthContext = createContext<AuthContextType>({ user: null, profile: null, loading: true });
+const AuthContext = createContext<AuthContextType>({ user: null, profile: null, loading: true, profileLoading: true });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    let unsubscribeProfile: () => void;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      setLoading(false); // Unblock the UI immediately once auth state is known
+      setLoading(false);
 
       if (currentUser) {
-        // Fetch profile asynchronously without blocking
-        const fetchProfile = async () => {
-          try {
-            const docRef = doc(db, 'users', currentUser.uid);
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-              setProfile(docSnap.data() as UserProfile);
-            } else {
-              // Create default profile
-              const newProfile: UserProfile = {
-                username: currentUser.displayName || 'Player',
-                elo_rating: 1200,
-                avg_accuracy: 0,
-                marker_theme: 'standard',
-                created_at: new Date().toISOString(),
-              };
-              await setDoc(docRef, newProfile);
-              setProfile(newProfile);
-            }
-          } catch (error: any) {
-            if (error?.message?.includes('client is offline')) {
-              console.warn("⚠️ Firestore is offline or not yet created. Using a local fallback profile. To fix this, please create your Firestore database in the Firebase Console.");
-            } else {
-              console.error("Error fetching/creating user profile:", error);
-            }
-            // If Firestore is offline or fails, provide a fallback profile so the app still works
-            setProfile({
-              username: currentUser.displayName || 'Player',
-              elo_rating: 1200,
-              avg_accuracy: 0,
-              marker_theme: 'standard',
-              created_at: new Date().toISOString(),
-            });
+        setProfileLoading(true);
+        const docRef = doc(db, 'users', currentUser.uid);
+        
+        unsubscribeProfile = onSnapshot(docRef, (docSnap) => {
+          if (docSnap.exists()) {
+            setProfile(docSnap.data() as UserProfile);
+          } else {
+            setProfile(null); // Needs onboarding
           }
-        };
-        fetchProfile();
+          setProfileLoading(false);
+        }, (error) => {
+          console.error("Error fetching user profile:", error);
+          setProfileLoading(false);
+        });
       } else {
         setProfile(null);
+        setProfileLoading(false);
+        if (unsubscribeProfile) unsubscribeProfile();
       }
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfile) unsubscribeProfile();
+    };
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading }}>
+    <AuthContext.Provider value={{ user, profile, loading, profileLoading }}>
       {children}
     </AuthContext.Provider>
   );

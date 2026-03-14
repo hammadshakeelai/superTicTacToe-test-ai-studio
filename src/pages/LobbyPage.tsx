@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../AuthContext';
-import { db } from '../firebase';
-import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
+import { db, auth } from '../firebase';
+import { collection, query, where, onSnapshot, orderBy, limit, addDoc, or } from 'firebase/firestore';
 import { motion } from 'motion/react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 
 export default function LobbyPage() {
@@ -11,25 +11,30 @@ export default function LobbyPage() {
   const navigate = useNavigate();
   const [matches, setMatches] = useState<any[]>([]);
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [chatMessages, setChatMessages] = useState<{sender: string, message: string, timestamp: number}[]>([]);
+  const [chatMessages, setChatMessages] = useState<{id: string, sender_name: string, message: string, timestamp: number}[]>([]);
   const [chatInput, setChatInput] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [botDifficulty, setBotDifficulty] = useState(3);
   const [gameMode, setGameMode] = useState<'bot' | 'friend'>('bot');
+  const [joinCode, setJoinCode] = useState('');
 
   useEffect(() => {
     if (!user) return;
     try {
       const q = query(
-        collection(db, 'match_players'),
-        where('user_id', '==', user.uid),
-        orderBy('started_at', 'desc'),
-        limit(10)
+        collection(db, 'match_records'),
+        or(
+          where('player_x', '==', user.uid),
+          where('player_o', '==', user.uid)
+        ),
+        limit(20)
       );
       const unsubscribe = onSnapshot(q, (snapshot) => {
-        setMatches(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        docs.sort((a, b) => b.created_at - a.created_at);
+        setMatches(docs.slice(0, 10));
       }, (error) => {
         console.error("Error fetching match history:", error);
       });
@@ -40,33 +45,55 @@ export default function LobbyPage() {
   }, [user]);
 
   useEffect(() => {
+    try {
+      const q = query(
+        collection(db, 'global_chat'),
+        orderBy('timestamp', 'desc'),
+        limit(50)
+      );
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)).reverse();
+        setChatMessages(msgs);
+        setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      }, (error) => {
+        console.error("Error fetching global chat:", error);
+      });
+      return unsubscribe;
+    } catch (error) {
+      console.error("Error setting up global chat listener:", error);
+    }
+  }, []);
+
+  useEffect(() => {
     const serverUrl = (import.meta as any).env?.VITE_APP_URL || window.location.origin;
     const newSocket = io(serverUrl);
     setSocket(newSocket);
-
-    newSocket.on('global_chat_receive', (data) => {
-      setChatMessages(prev => [...prev, data]);
-      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-    });
-
     return () => {
       newSocket.disconnect();
     };
   }, []);
 
-  const sendGlobalChat = (e: React.FormEvent) => {
+  const sendGlobalChat = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim() || !socket) return;
-    socket.emit('global_chat_send', {
-      sender: profile?.username || user?.displayName || 'Player',
-      message: chatInput.trim(),
-      timestamp: Date.now()
-    });
+    if (!chatInput.trim() || !user || !profile) return;
+    
+    const msg = chatInput.trim();
     setChatInput('');
+    
+    try {
+      await addDoc(collection(db, 'global_chat'), {
+        sender_id: user.uid,
+        sender_name: profile.username,
+        message: msg,
+        timestamp: Date.now()
+      });
+    } catch (error) {
+      console.error("Error sending message:", error);
+    }
   };
 
   const createPrivateMatch = () => {
-    const matchId = Math.random().toString(36).substring(2, 10);
+    const matchId = Math.random().toString(36).substring(2, 8).toUpperCase();
     if (socket && user) {
       socket.emit('create_match', { matchId, userId: user.uid });
       setTimeout(() => navigate(`/play/${matchId}`), 100);
@@ -74,10 +101,17 @@ export default function LobbyPage() {
   };
 
   const createBotMatch = () => {
-    const matchId = 'bot_' + Math.random().toString(36).substring(2, 10);
+    const matchId = 'bot_' + Math.random().toString(36).substring(2, 8).toUpperCase();
     if (socket && user) {
       socket.emit('create_match', { matchId, userId: user.uid, isBotMatch: true, botDifficulty });
       setTimeout(() => navigate(`/play/${matchId}`), 100);
+    }
+  };
+
+  const joinMatchByCode = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (joinCode.trim()) {
+      navigate(`/play/${joinCode.trim().toUpperCase()}`);
     }
   };
 
@@ -116,8 +150,25 @@ export default function LobbyPage() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 p-8 overflow-y-auto">
-        <div className="max-w-4xl mx-auto space-y-8">
+      <div className="flex-1 p-8 overflow-y-auto relative">
+        <div className="absolute top-8 right-8 flex items-center gap-4">
+          <Link to="/leaderboard" className="text-slate-400 hover:text-indigo-400 transition-colors text-sm font-medium flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+            Leaderboard
+          </Link>
+          <Link to={`/profile/${user?.uid}`} className="text-slate-400 hover:text-indigo-400 transition-colors text-sm font-medium flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+            Profile
+          </Link>
+          <button 
+            onClick={() => { auth.signOut(); navigate('/'); }}
+            className="text-slate-400 hover:text-red-400 transition-colors text-sm font-medium flex items-center gap-2 ml-4"
+          >
+            Logout &rarr;
+          </button>
+        </div>
+        
+        <div className="max-w-4xl mx-auto space-y-8 mt-8">
           {/* Profile Card */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -135,7 +186,7 @@ export default function LobbyPage() {
                     Elo: <span className="text-indigo-400 font-mono font-bold">{profile?.elo_rating}</span>
                   </div>
                   <div className="bg-slate-900 px-3 py-1 rounded-full border border-slate-700">
-                    Accuracy: <span className="text-emerald-400 font-mono font-bold">{profile?.avg_accuracy}%</span>
+                    Matches: <span className="text-emerald-400 font-mono font-bold">{profile?.matches_played || 0}</span>
                   </div>
                 </div>
               </div>
@@ -153,13 +204,42 @@ export default function LobbyPage() {
               >
                 Play Computer (Bot)
               </button>
-              <button
-                onClick={() => alert("Tournaments feature coming soon!")}
-                className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold transition-colors w-full"
-              >
-                Join Tournament
-              </button>
             </div>
+          </motion.div>
+
+          {/* Join by Code Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4"
+          >
+            <div>
+              <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2">
+                <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                Join with Code
+              </h2>
+              <p className="text-sm text-slate-400">Have a match code from a friend? Enter it here.</p>
+            </div>
+            <form onSubmit={joinMatchByCode} className="flex w-full md:w-auto gap-2">
+              <input
+                type="text"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                placeholder="e.g. A1B2C3"
+                className="bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500 font-mono uppercase w-full md:w-48"
+                maxLength={8}
+              />
+              <button
+                type="submit"
+                disabled={!joinCode.trim()}
+                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-xl font-bold transition-colors"
+              >
+                Join
+              </button>
+            </form>
           </motion.div>
 
           {/* Tips Section */}
@@ -240,15 +320,28 @@ export default function LobbyPage() {
 
           {/* Match History */}
           <div>
-            <h2 className="text-2xl font-bold text-white mb-6">Match History</h2>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                <svg className="w-6 h-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Recent Matches
+              </h2>
+              <Link
+                to={`/profile/${user?.uid}`}
+                className="text-sm px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-slate-700"
+              >
+                View Full History
+              </Link>
+            </div>
             <div className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-900/50 text-slate-400 text-sm uppercase tracking-wider">
                     <th className="p-4 font-medium">Opponent</th>
                     <th className="p-4 font-medium">Result</th>
-                    <th className="p-4 font-medium">Elo Change</th>
-                    <th className="p-4 font-medium">Accuracy</th>
+                    <th className="p-4 font-medium">Moves</th>
+                    <th className="p-4 font-medium">Status</th>
                     <th className="p-4 font-medium">Date</th>
                   </tr>
                 </thead>
@@ -260,31 +353,27 @@ export default function LobbyPage() {
                       </td>
                     </tr>
                   ) : (
-                    matches.map((match) => (
-                      <tr key={match.id} className="hover:bg-slate-700/20 transition-colors">
-                        <td className="p-4 text-white font-medium">Player {match.opponent_id}</td>
-                        <td className="p-4">
-                          <span className={`px-2 py-1 rounded text-xs font-bold ${
-                            match.result === 'win' ? 'bg-emerald-500/20 text-emerald-400' :
-                            match.result === 'loss' ? 'bg-red-500/20 text-red-400' :
-                            'bg-slate-500/20 text-slate-400'
-                          }`}>
-                            {match.result?.toUpperCase() || 'DRAW'}
-                          </span>
-                        </td>
-                        <td className="p-4 font-mono text-sm">
-                          <span className={match.elo_change > 0 ? 'text-emerald-400' : 'text-red-400'}>
-                            {match.elo_change > 0 ? '+' : ''}{match.elo_change || 0}
-                          </span>
-                        </td>
-                        <td className="p-4 font-mono text-sm text-slate-300">
-                          {match.accuracy_score || 0}%
-                        </td>
-                        <td className="p-4 text-sm text-slate-400">
-                          {new Date(match.started_at).toLocaleDateString()}
-                        </td>
-                      </tr>
-                    ))
+                    matches.map((match) => {
+                      const isWinner = match.winner === user?.uid;
+                      const isDraw = match.winner === 'Draw';
+                      const resultColor = isWinner ? 'bg-emerald-500/20 text-emerald-400' : isDraw ? 'bg-slate-500/20 text-slate-400' : 'bg-red-500/20 text-red-400';
+                      const resultText = isWinner ? 'Win' : isDraw ? 'Draw' : 'Loss';
+                      const opponentName = match.player_x === user?.uid ? match.player_o_name : match.player_x_name;
+
+                      return (
+                        <tr key={match.id} className="hover:bg-slate-700/20 transition-colors">
+                          <td className="p-4 text-white font-medium">{opponentName || 'Bot'}</td>
+                          <td className="p-4">
+                            <span className={`px-2 py-1 rounded text-xs font-bold ${resultColor}`}>
+                              {resultText}
+                            </span>
+                          </td>
+                          <td className="p-4 text-slate-300 font-mono">{match.moves_count}</td>
+                          <td className="p-4 text-slate-300 capitalize">{match.status}</td>
+                          <td className="p-4 text-slate-400 font-mono text-sm">{new Date(match.created_at).toLocaleDateString()}</td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

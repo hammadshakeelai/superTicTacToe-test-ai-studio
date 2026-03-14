@@ -90,7 +90,15 @@ async function startServer() {
             });
 
             if (newState.winner) {
-              io.to(matchId).emit('game_over', { winner: newState.winner });
+              io.to(matchId).emit('game_over', { 
+                winner: newState.winner,
+                matchDetails: {
+                  player_x: game.players.X,
+                  player_o: game.players.O,
+                  isBotMatch: game.isBotMatch || false,
+                  moves_count: newState.moves.length
+                }
+              });
               activeGames.delete(matchId);
             }
           }
@@ -121,7 +129,15 @@ async function startServer() {
         });
 
         if (newState.winner) {
-          io.to(matchId).emit('game_over', { winner: newState.winner });
+          io.to(matchId).emit('game_over', { 
+            winner: newState.winner,
+            matchDetails: {
+              player_x: game.players.X,
+              player_o: game.players.O,
+              isBotMatch: game.isBotMatch || false,
+              moves_count: newState.moves.length
+            }
+          });
           activeGames.delete(matchId);
         } else if (game.isBotMatch) {
           handleBotMove(matchId);
@@ -139,6 +155,62 @@ async function startServer() {
           socket.emit('receive_hint', hintMove);
         }
       }
+    });
+
+    socket.on('resign', (data) => {
+      const { matchId, player } = data;
+      const game = activeGames.get(matchId);
+      if (game && !game.state.winner) {
+        const winner = player === 'X' ? 'O' : 'X';
+        game.state.winner = winner;
+        io.to(matchId).emit('game_over', { 
+          winner: winner,
+          matchDetails: {
+            player_x: game.players.X,
+            player_o: game.players.O,
+            isBotMatch: game.isBotMatch || false,
+            moves_count: game.state.moves.length
+          }
+        });
+        activeGames.delete(matchId);
+      }
+    });
+
+    socket.on('offer_draw', (data) => {
+      const { matchId, player } = data;
+      const game = activeGames.get(matchId);
+      if (game && !game.state.winner) {
+        if (game.isBotMatch) {
+          // Bot always declines draw for now
+          socket.emit('draw_declined');
+        } else {
+          // Send to the other player
+          socket.to(matchId).emit('draw_offered', { by: player });
+        }
+      }
+    });
+
+    socket.on('accept_draw', (data) => {
+      const { matchId } = data;
+      const game = activeGames.get(matchId);
+      if (game && !game.state.winner) {
+        game.state.winner = 'Draw';
+        io.to(matchId).emit('game_over', { 
+          winner: 'Draw',
+          matchDetails: {
+            player_x: game.players.X,
+            player_o: game.players.O,
+            isBotMatch: game.isBotMatch || false,
+            moves_count: game.state.moves.length
+          }
+        });
+        activeGames.delete(matchId);
+      }
+    });
+
+    socket.on('decline_draw', (data) => {
+      const { matchId } = data;
+      socket.to(matchId).emit('draw_declined');
     });
 
     socket.on('send_message', (data) => {

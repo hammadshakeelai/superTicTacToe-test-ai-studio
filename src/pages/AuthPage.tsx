@@ -235,7 +235,13 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col lg:flex-row overflow-hidden">
+    <div className="min-h-screen bg-slate-900 flex flex-col lg:flex-row overflow-hidden relative">
+      <button 
+        onClick={() => navigate('/')} 
+        className="absolute top-6 left-6 z-50 text-slate-400 hover:text-white transition-colors flex items-center gap-2 font-medium"
+      >
+        &larr; Back to Home
+      </button>
       {/* Left Side - Auth */}
       <div className="flex-1 flex items-center justify-center p-8 lg:p-12 z-10 bg-slate-900 shadow-2xl">
         <motion.div
