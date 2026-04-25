@@ -26,17 +26,24 @@ service cloud.firestore {
     // ===============================================================
     // Domain Validators
     // ===============================================================
-    function isValidUser() {
+    function isValidNewUser() {
       return hasOnlyAllowedFields(['username', 'email', 'elo_rating', 'avg_accuracy', 'matches_played', 'wins', 'losses', 'draws', 'created_at']) &&
              validStringLength('username', 3, 20) &&
              request.resource.data.email is string &&
-             request.resource.data.elo_rating is number &&
-             request.resource.data.avg_accuracy is number &&
-             request.resource.data.matches_played is number &&
-             request.resource.data.wins is number &&
-             request.resource.data.losses is number &&
-             request.resource.data.draws is number &&
+             request.resource.data.elo_rating == 1200 &&
+             request.resource.data.avg_accuracy == 0 &&
+             request.resource.data.matches_played == 0 &&
+             request.resource.data.wins == 0 &&
+             request.resource.data.losses == 0 &&
+             request.resource.data.draws == 0 &&
              request.resource.data.created_at is number;
+    }
+
+    function isValidUserUpdate() {
+      return hasOnlyAllowedFields(['username', 'email', 'elo_rating', 'avg_accuracy', 'matches_played', 'wins', 'losses', 'draws', 'created_at']) &&
+             request.resource.data.created_at == resource.data.created_at &&
+             request.resource.data.email == resource.data.email &&
+             request.resource.data.username == resource.data.username;
     }
 
     function isValidUsername() {
@@ -70,16 +77,8 @@ service cloud.firestore {
     
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(userId) && isValidUser() && 
-                    request.resource.data.elo_rating == 1200 &&
-                    request.resource.data.avg_accuracy == 0 &&
-                    request.resource.data.matches_played == 0 &&
-                    request.resource.data.wins == 0 &&
-                    request.resource.data.losses == 0 &&
-                    request.resource.data.draws == 0;
-      allow update: if isOwner(userId) && isValidUser() && 
-                    request.resource.data.created_at == resource.data.created_at &&
-                    request.resource.data.email == resource.data.email;
+      allow create: if isOwner(userId) && isValidNewUser();
+      allow update: if isOwner(userId) && isValidUserUpdate();
     }
 
     match /usernames/{username} {
