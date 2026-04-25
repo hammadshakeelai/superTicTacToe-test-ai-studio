@@ -57,74 +57,55 @@ export default function GameRoomPage() {
     return () => { socket.off('receive_message', onReceiveMessage); };
   }, [socket]);
 
-  // Handle game over — save stats to Firestore
+  // Handle game over — save stats locally
   useEffect(() => {
     if (!gameOverData || !user || !profile) return;
 
     setShowGameOver(true);
     const { winner, matchDetails } = gameOverData;
 
-    (async () => {
-      try {
-        const { doc, getDoc, setDoc, updateDoc, collection, increment } = await import('firebase/firestore');
-        const { db } = await import('../firebase');
+    try {
+      const { saveLocalProfile } = require('../AuthContext');
+      const isPlayerX = matchDetails.player_x === user.uid;
+      const isPlayerO = matchDetails.player_o === user.uid;
 
-        const isPlayerX = matchDetails.player_x === user.uid;
-        const isPlayerO = matchDetails.player_o === user.uid;
+      if (isPlayerX || isPlayerO) {
+        const isWinner = (isPlayerX && winner === 'X') || (isPlayerO && winner === 'O');
+        const isDraw = winner === 'Draw';
+        const isLoser = !isWinner && !isDraw;
 
-        if (isPlayerX || isPlayerO) {
-          const isWinner = (isPlayerX && winner === 'X') || (isPlayerO && winner === 'O');
-          const isDraw = winner === 'Draw';
-          const isLoser = !isWinner && !isDraw;
+        let eloChange = isWinner ? 15 : isDraw ? 0 : -15;
+        const newElo = Math.max(0, profile.elo_rating + eloChange);
 
-          let eloChange = isWinner ? 15 : isDraw ? 0 : -15;
-          const newElo = Math.max(0, profile.elo_rating + eloChange);
-
-          // Calculate accuracy from log
-          let myAccuracy = 0;
-          const myRole = isPlayerX ? 'X' : 'O';
-          const myMoves = accuracyLogRef.current.filter(log => log.move.player === myRole);
-          if (myMoves.length > 0) {
-            const totalDelta = myMoves.reduce((sum, log) => sum + Math.max(0, 1000 - Math.abs(log.delta)), 0);
-            myAccuracy = Math.round((totalDelta / (myMoves.length * 1000)) * 100);
-          }
-
-          const newAvgAccuracy = Math.round(
-            ((profile.avg_accuracy * profile.matches_played) + myAccuracy) / (profile.matches_played + 1)
-          );
-
-          await updateDoc(doc(db, 'users', user.uid), {
-            matches_played: increment(1),
-            wins: increment(isWinner ? 1 : 0),
-            losses: increment(isLoser ? 1 : 0),
-            draws: increment(isDraw ? 1 : 0),
-            elo_rating: newElo,
-            avg_accuracy: newAvgAccuracy,
-          });
-
-          // Only player X saves match record to avoid duplicates
-          if (isPlayerX) {
-            let playerOName = 'Bot';
-            if (!matchDetails.isBotMatch && matchDetails.player_o) {
-              const oDoc = await getDoc(doc(db, 'users', matchDetails.player_o));
-              playerOName = oDoc.exists() ? oDoc.data().username : 'Unknown';
-            }
-            await setDoc(doc(collection(db, 'match_records'), matchId), {
-              player_x: matchDetails.player_x,
-              player_o: matchDetails.player_o,
-              player_x_name: profile.username || 'Unknown',
-              player_o_name: playerOName,
-              winner: winner === 'X' ? matchDetails.player_x : (winner === 'O' ? matchDetails.player_o : 'Draw'),
-              status: 'completed',
-              moves_count: matchDetails.moves_count,
-              created_at: Date.now(),
-            });
-          }
+        // Calculate accuracy from log
+        let myAccuracy = 0;
+        const myRole = isPlayerX ? 'X' : 'O';
+        const myMoves = accuracyLogRef.current.filter(log => log.move.player === myRole);
+        if (myMoves.length > 0) {
+          const totalDelta = myMoves.reduce((sum, log) => sum + Math.max(0, 1000 - Math.abs(log.delta)), 0);
+          myAccuracy = Math.round((totalDelta / (myMoves.length * 1000)) * 100);
         }
-      } catch (error) {
-        console.error('Error saving match record or stats:', error);
+
+        const newAvgAccuracy = Math.round(
+          ((profile.avg_accuracy * profile.matches_played) + myAccuracy) / (profile.matches_played + 1)
+        );
+
+        const updatedProfile = {
+          ...profile,
+          matches_played: profile.matches_played + 1,
+          wins: profile.wins + (isWinner ? 1 : 0),
+          losses: profile.losses + (isLoser ? 1 : 0),
+          draws: profile.draws + (isDraw ? 1 : 0),
+          elo_rating: newElo,
+          avg_accuracy: newAvgAccuracy,
+        };
+
+        saveLocalProfile(user.uid, updatedProfile);
+        window.dispatchEvent(new Event('profile-updated'));
       }
-    })();
+    } catch (error) {
+      console.error('Error saving match stats:', error);
+    }
   }, [gameOverData]);
 
   const handleSendChat = (message: string) => {
