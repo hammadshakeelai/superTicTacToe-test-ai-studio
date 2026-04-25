@@ -1,9 +1,9 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyARCWspCtZwl4UZXznJM9n9awtaBmLvOFw",
+  apiKey: "AIzaSyARCWspCtZwl4UZXznJM9n7awtaBmLvOFw",
   authDomain: "gen-lang-client-0977588738.firebaseapp.com",
   projectId: "gen-lang-client-0977588738",
   storageBucket: "gen-lang-client-0977588738.firebasestorage.app",
@@ -12,5 +12,18 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
 export const auth = getAuth(app);
+
+// Initialize Firestore — may fail at runtime if database doesn't exist
+export const db = getFirestore(app);
+
+/**
+ * Flag that tracks whether Firestore is available.
+ * Set to false when we detect the "database not found" error.
+ */
+export let firestoreAvailable = true;
+
+export function setFirestoreUnavailable() {
+  firestoreAvailable = false;
+  console.warn('[Firebase] Firestore database not found — falling back to local storage.');
+}
