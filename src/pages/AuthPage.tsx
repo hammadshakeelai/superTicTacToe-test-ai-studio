@@ -1,14 +1,8 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { auth } from '../firebase';
+import { registerWithEmail, loginWithEmail } from '../AuthContext';
 import { motion } from 'motion/react';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: (string | undefined | null | false)[]) {
-  return twMerge(clsx(inputs));
-}
+import { cn } from '../utils';
 
 function SimpleTicTacToeDemo() {
   const [board, setBoard] = useState<(string | null)[]>(Array(9).fill(null));
@@ -219,18 +213,62 @@ function SuperTicTacToeDemo() {
 }
 
 export default function AuthPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const isLogin = location.pathname === '/login';
 
-  const handleGoogleAuth = async () => {
+  const getErrorMessage = (code: string): string => {
+    switch (code) {
+      case 'auth/email-already-in-use': return 'This email is already registered. Try logging in.';
+      case 'auth/invalid-email': return 'Please enter a valid email address.';
+      case 'auth/weak-password': return 'Password must be at least 6 characters.';
+      case 'auth/user-not-found': return 'No account found with this email.';
+      case 'auth/wrong-password': return 'Incorrect password. Please try again.';
+      case 'auth/invalid-credential': return 'Invalid email or password. Please try again.';
+      case 'auth/too-many-requests': return 'Too many attempts. Please wait a moment.';
+      case 'auth/network-request-failed': return 'Network error. Check your connection.';
+      default: return 'Something went wrong. Please try again.';
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (!email.trim() || !password.trim()) {
+      setError('Please fill in all fields.');
+      return;
+    }
+
+    if (!isLogin && password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    if (!isLogin && password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+
+    setLoading(true);
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      navigate('/lobby');
+      if (isLogin) {
+        await loginWithEmail(email.trim(), password);
+      } else {
+        await registerWithEmail(email.trim(), password);
+      }
+      // Force a page reload to pick up the new session in AuthContext
+      window.location.href = '/lobby';
     } catch (err: any) {
-      setError(err.message);
+      setError(getErrorMessage(err.code || err.message || ''));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -258,7 +296,11 @@ export default function AuthPage() {
             <h2 className="text-3xl font-bold text-white mb-2">
               {isLogin ? 'Welcome Back' : 'Create Account'}
             </h2>
-            <p className="text-slate-400 text-sm">Sign in to play ranked matches and track your Elo.</p>
+            <p className="text-slate-400 text-sm">
+              {isLogin
+                ? 'Sign in to play ranked matches and track your Elo.'
+                : 'Create an account to start playing and climbing the leaderboard.'}
+            </p>
           </div>
           
           {error && (
@@ -267,23 +309,97 @@ export default function AuthPage() {
             </div>
           )}
 
-          <button
-            onClick={handleGoogleAuth}
-            className="w-full py-3.5 px-4 bg-white text-slate-900 font-bold rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-3 shadow-lg"
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-              <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-              <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-              <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-            </svg>
-            Continue with Google
-          </button>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Email */}
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-slate-400 mb-1.5">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="player@example.com"
+                autoComplete={isLogin ? 'email' : 'new-email'}
+                disabled={loading}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-colors disabled:opacity-50"
+              />
+            </div>
+
+            {/* Password */}
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-slate-400 mb-1.5">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={isLogin ? '••••••••' : 'Min 6 characters'}
+                  autoComplete={isLogin ? 'current-password' : 'new-password'}
+                  disabled={loading}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-colors disabled:opacity-50"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" /></svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Confirm Password (register only) */}
+            {!isLogin && (
+              <div>
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-400 mb-1.5">
+                  Confirm Password
+                </label>
+                <input
+                  id="confirmPassword"
+                  type={showPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Repeat your password"
+                  autoComplete="new-password"
+                  disabled={loading}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-colors disabled:opacity-50"
+                />
+              </div>
+            )}
+
+            {/* Submit */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all hover:scale-[1.01] active:scale-[0.99] shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2 mt-2"
+            >
+              {loading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  {isLogin ? 'Signing in...' : 'Creating account...'}
+                </>
+              ) : (
+                <>
+                  {isLogin ? '🔑 Sign In' : '🚀 Create Account'}
+                </>
+              )}
+            </button>
+          </form>
 
           <p className="mt-8 text-center text-slate-400 text-sm">
             {isLogin ? "Don't have an account? " : "Already have an account? "}
             <button
-              onClick={() => navigate(isLogin ? '/register' : '/login')}
+              onClick={() => { navigate(isLogin ? '/register' : '/login'); setError(''); }}
               className="text-indigo-400 hover:text-indigo-300 font-semibold"
             >
               {isLogin ? 'Sign up' : 'Log in'}
