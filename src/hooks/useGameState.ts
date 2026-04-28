@@ -35,6 +35,7 @@ export interface GameOverData {
     player_o: string;
     isBotMatch: boolean;
     moves_count: number;
+    botDifficulty?: number;
   };
 }
 
