@@ -123,11 +123,17 @@ export default function SummaryPage() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
-          className="flex gap-4"
+          className="flex flex-col gap-3"
         >
           <button
+            onClick={() => navigate(`/review/${matchId}`)}
+            className="w-full py-4 bg-violet-600 hover:bg-violet-700 rounded-xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-violet-500/20 flex items-center justify-center gap-2"
+          >
+            <span>🎓</span> Review Game
+          </button>
+          <button
             onClick={() => navigate('/lobby')}
-            className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-700 rounded-xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-indigo-500/20"
+            className="w-full py-4 bg-slate-700 hover:bg-slate-600 rounded-xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
             Back to Lobby
           </button>
