@@ -15,6 +15,7 @@ import SummaryPage from './pages/SummaryPage';
 import OnboardingPage from './pages/OnboardingPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import ProfilePage from './pages/ProfilePage';
+import ReviewPage from './pages/ReviewPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, profile, loading, profileLoading } = useAuth();
@@ -56,6 +57,7 @@ export default function App() {
             <Route path="/profile/:uid" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
             <Route path="/play/:matchId" element={<ProtectedRoute><GameRoomPage /></ProtectedRoute>} />
             <Route path="/summary/:matchId" element={<ProtectedRoute><SummaryPage /></ProtectedRoute>} />
+            <Route path="/review/:matchId" element={<ProtectedRoute><ReviewPage /></ProtectedRoute>} />
           </Routes>
         </Router>
       </AuthProvider>
