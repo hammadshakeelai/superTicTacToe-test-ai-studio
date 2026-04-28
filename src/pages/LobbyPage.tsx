@@ -5,7 +5,7 @@ import { motion } from 'motion/react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useSocket } from '../hooks/useSocket';
 import ChatBox from '../components/ChatBox';
-import { cn, generateMatchId, formatDate } from '../utils';
+import { cn, generateMatchId, formatDate, getMatchHistory, BOT_DIFFICULTY_LABELS, BOT_DIFFICULTY_COLORS } from '../utils';
 import type { MatchRecord } from '../types';
 
 export default function LobbyPage() {
@@ -14,6 +14,22 @@ export default function LobbyPage() {
   const { socket } = useSocket();
   const [matches, setMatches] = useState<MatchRecord[]>([]);
   const [chatMessages, setChatMessages] = useState<{ sender: string; message: string; timestamp: number }[]>([]);
+
+  // Load local match history
+  useEffect(() => {
+    if (user?.uid) {
+      setMatches(getMatchHistory(user.uid).slice(0, 10));
+    }
+  }, [user?.uid]);
+
+  // Refresh history when returning from a game
+  useEffect(() => {
+    const refresh = () => {
+      if (user?.uid) setMatches(getMatchHistory(user.uid).slice(0, 10));
+    };
+    window.addEventListener('profile-updated', refresh);
+    return () => window.removeEventListener('profile-updated', refresh);
+  }, [user?.uid]);
 
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [botDifficulty, setBotDifficulty] = useState(3);
@@ -217,15 +233,39 @@ export default function LobbyPage() {
                     </tr>
                   ) : (
                     matches.map((match) => {
-                      const isWinner = match.winner === user?.uid;
+                      const isPlayerX = match.player_x === user?.uid;
+                      const myRole = isPlayerX ? 'X' : 'O';
+                      const isWinner = match.winner === myRole;
                       const isDraw = match.winner === 'Draw';
                       const resultColor = isWinner ? 'bg-emerald-500/20 text-emerald-400' : isDraw ? 'bg-slate-500/20 text-slate-400' : 'bg-red-500/20 text-red-400';
                       const resultText = isWinner ? 'Win' : isDraw ? 'Draw' : 'Loss';
-                      const opponentName = match.player_x === user?.uid ? match.player_o_name : match.player_x_name;
+                      const diffLabel = match.botDifficulty ? BOT_DIFFICULTY_LABELS[match.botDifficulty] : '';
+                      const diffColor = match.botDifficulty ? BOT_DIFFICULTY_COLORS[match.botDifficulty] : '';
 
                       return (
                         <tr key={match.id} className="hover:bg-slate-700/20 transition-colors">
-                          <td className="p-4 text-white font-medium">{opponentName || 'Bot'}</td>
+                          <td className="p-4">
+                            <div className="flex items-center gap-2">
+                              {match.isBotMatch ? (
+                                <>
+                                  <span className="text-base leading-none" title="Computer opponent">🤖</span>
+                                  <span className="text-white font-medium">Computer</span>
+                                  {diffLabel && (
+                                    <span className={cn('text-xs px-1.5 py-0.5 rounded border font-semibold', diffColor)}>
+                                      {diffLabel}
+                                    </span>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  <span className="text-base leading-none">👤</span>
+                                  <span className="text-white font-medium">
+                                    {isPlayerX ? match.player_o_name : match.player_x_name || 'Player'}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </td>
                           <td className="p-4">
                             <span className={`px-2 py-1 rounded text-xs font-bold ${resultColor}`}>{resultText}</span>
                           </td>
