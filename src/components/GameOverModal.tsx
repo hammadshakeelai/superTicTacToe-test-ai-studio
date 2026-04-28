@@ -6,6 +6,7 @@ interface GameOverModalProps {
   playerRole: 'X' | 'O' | 'Spectator' | null;
   onBackToLobby: () => void;
   onRematch?: () => void;
+  onReview?: () => void;
 }
 
 /**
@@ -16,6 +17,7 @@ export default function GameOverModal({
   playerRole,
   onBackToLobby,
   onRematch,
+  onReview,
 }: GameOverModalProps) {
   const isWinner = winner === playerRole;
   const isDraw = winner === 'Draw';
@@ -87,24 +89,34 @@ export default function GameOverModal({
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3">
-            {onRematch && (
+          <div className="flex flex-col gap-3">
+            {onReview && (
               <button
-                onClick={onRematch}
-                className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-indigo-500/20"
+                onClick={onReview}
+                className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-violet-500/20 flex items-center justify-center gap-2"
               >
-                Rematch
+                <span>🎓</span> Review Game
               </button>
             )}
-            <button
-              onClick={onBackToLobby}
-              className={cn(
-                "py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]",
-                onRematch ? "flex-1" : "w-full"
+            <div className="flex gap-3">
+              {onRematch && (
+                <button
+                  onClick={onRematch}
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-indigo-500/20"
+                >
+                  Rematch
+                </button>
               )}
-            >
-              Back to Lobby
-            </button>
+              <button
+                onClick={onBackToLobby}
+                className={cn(
+                  "py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]",
+                  onRematch ? "flex-1" : "w-full"
+                )}
+              >
+                Back to Lobby
+              </button>
+            </div>
           </div>
         </motion.div>
       </motion.div>
