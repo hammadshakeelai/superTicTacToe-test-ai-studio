@@ -9,6 +9,8 @@ interface SubBoardProps {
   subWinner: Player | 'Draw' | null;
   hintMove: Move | null;
   onCellClick: (superIdx: number, subIdx: number) => void;
+  lastMove?: Move | null;
+  bestMove?: Move | null;
 }
 
 /**
@@ -22,6 +24,8 @@ export default function SubBoard({
   subWinner,
   hintMove,
   onCellClick,
+  lastMove,
+  bestMove,
 }: SubBoardProps) {
   return (
     <div
@@ -62,6 +66,12 @@ export default function SubBoard({
         const isHint =
           hintMove?.superGridIndex === superIdx &&
           hintMove?.subGridIndex === subIdx;
+        const isLastMove =
+          lastMove?.superGridIndex === superIdx &&
+          lastMove?.subGridIndex === subIdx;
+        const isBestMove =
+          bestMove?.superGridIndex === superIdx &&
+          bestMove?.subGridIndex === subIdx;
 
         return (
           <button
@@ -78,6 +88,10 @@ export default function SubBoard({
               cell === 'X' ? "text-indigo-400" : cell === 'O' ? "text-rose-400" : "",
               isHint
                 ? "ring-2 ring-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.6)] bg-sky-500/20 animate-pulse"
+                : isLastMove
+                ? "ring-2 ring-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.4)] bg-amber-500/10"
+                : isBestMove
+                ? "ring-2 ring-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.4)] bg-emerald-500/10"
                 : ""
             )}
             aria-label={`Cell ${superIdx}-${subIdx}: ${cell || 'empty'}`}
