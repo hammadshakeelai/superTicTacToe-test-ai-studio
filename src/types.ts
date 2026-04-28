@@ -64,6 +64,7 @@ export interface MatchDetails {
   player_o: string;
   isBotMatch: boolean;
   moves_count: number;
+  botDifficulty?: number;
 }
 
 export interface ClientToServerEvents {
@@ -136,4 +137,27 @@ export interface MatchRecord {
   status: 'completed' | 'abandoned' | 'resigned' | 'timeout';
   moves_count: number;
   created_at: number;
+  isBotMatch?: boolean;
+  botDifficulty?: number;
+}
+
+// ============================================================
+// Review / Replay Types
+// ============================================================
+
+export interface CompletedGameRecord {
+  matchId: string;
+  moves: Move[];
+  accuracyLog: MoveAccuracyLog[];
+  playerXName: string;
+  playerOName: string;
+  winner: Player | 'Draw' | null;
+  playerRole: 'X' | 'O' | 'Spectator';
+  timestamp: number;
+}
+
+export interface CoachComment {
+  headline: string;
+  detail: string;
+  bestMoveDescription: string | null;
 }
