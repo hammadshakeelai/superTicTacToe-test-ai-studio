@@ -1,5 +1,6 @@
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import type { MatchRecord } from './types';
 
 /**
  * Merges Tailwind CSS classes intelligently.
@@ -83,3 +84,46 @@ export function calcWinRate(wins: number, total: number): number {
 export function moveToKey(superIdx: number, subIdx: number): string {
   return `${superIdx}-${subIdx}`;
 }
+
+// ============================================================
+// Match History (localStorage)
+// ============================================================
+
+const HISTORY_LIMIT = 50;
+
+export function getMatchHistory(userId: string): MatchRecord[] {
+  try {
+    const raw = localStorage.getItem(`match_history_${userId}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveMatchToHistory(userId: string, record: MatchRecord) {
+  const history = getMatchHistory(userId);
+  // Avoid duplicates
+  const filtered = history.filter(m => m.id !== record.id);
+  filtered.unshift(record);
+  localStorage.setItem(`match_history_${userId}`, JSON.stringify(filtered.slice(0, HISTORY_LIMIT)));
+}
+
+// ============================================================
+// Bot difficulty helpers
+// ============================================================
+
+export const BOT_DIFFICULTY_LABELS: Record<number, string> = {
+  1: 'Beginner',
+  2: 'Easy',
+  3: 'Medium',
+  4: 'Hard',
+  5: 'Expert',
+};
+
+export const BOT_DIFFICULTY_COLORS: Record<number, string> = {
+  1: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+  2: 'text-sky-400 bg-sky-500/10 border-sky-500/30',
+  3: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/30',
+  4: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
+  5: 'text-red-400 bg-red-500/10 border-red-500/30',
+};
