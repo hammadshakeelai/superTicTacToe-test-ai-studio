@@ -10,7 +10,7 @@ import ChatBox from '../components/ChatBox';
 import GameOverModal from '../components/GameOverModal';
 import DrawOfferModal, { DrawDeclinedToast } from '../components/DrawOfferModal';
 import ConnectionStatus from '../components/ConnectionStatus';
-import { cn } from '../utils';
+import { cn, saveMatchToHistory } from '../utils';
 
 export default function GameRoomPage() {
   const { matchId } = useParams<{ matchId: string }>();
@@ -44,6 +44,8 @@ export default function GameRoomPage() {
   const [confirmResign, setConfirmResign] = useState(false);
   const accuracyLogRef = useRef(accuracyLog);
   accuracyLogRef.current = accuracyLog;
+  const gameStateRef = useRef(gameState);
+  gameStateRef.current = gameState;
 
   // Listen for chat messages
   useEffect(() => {
@@ -102,6 +104,37 @@ export default function GameRoomPage() {
 
         saveLocalProfile(user.uid, updatedProfile);
         window.dispatchEvent(new Event('profile-updated'));
+
+        // Save completed game record for review
+        const currentGameState = gameStateRef.current;
+        if (matchId && currentGameState) {
+          const reviewRecord = {
+            matchId,
+            moves: currentGameState.moves,
+            accuracyLog: accuracyLogRef.current,
+            playerXName: matchDetails.player_x,
+            playerOName: matchDetails.player_o,
+            winner,
+            playerRole: isPlayerX ? 'X' : 'O',
+            timestamp: Date.now(),
+          };
+          localStorage.setItem(`review_${matchId}`, JSON.stringify(reviewRecord));
+
+          // Save to match history list for lobby/profile display
+          saveMatchToHistory(user.uid, {
+            id: matchId,
+            player_x: matchDetails.player_x,
+            player_o: matchDetails.player_o,
+            player_x_name: isPlayerX ? (profile.username || '') : (matchDetails.isBotMatch ? 'BOT' : matchDetails.player_o),
+            player_o_name: isPlayerX ? (matchDetails.isBotMatch ? 'BOT' : matchDetails.player_o) : (profile.username || ''),
+            winner: winner ?? 'Draw',
+            status: 'completed',
+            moves_count: matchDetails.moves_count,
+            created_at: Date.now(),
+            isBotMatch: matchDetails.isBotMatch,
+            botDifficulty: matchDetails.botDifficulty,
+          });
+        }
       }
     } catch (error) {
       console.error('Error saving match stats:', error);
@@ -130,6 +163,10 @@ export default function GameRoomPage() {
 
   const handleBackToLobby = () => {
     navigate('/lobby');
+  };
+
+  const handleReviewGame = () => {
+    navigate(`/review/${matchId}`);
   };
 
   // Loading state
@@ -256,6 +293,7 @@ export default function GameRoomPage() {
           winner={gameOverData.winner}
           playerRole={playerRole}
           onBackToLobby={handleBackToLobby}
+          onReview={handleReviewGame}
         />
       )}
 
