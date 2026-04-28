@@ -1,47 +1,39 @@
 import { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import { doc, getDoc, collection, query, where, orderBy, limit, getDocs, or } from 'firebase/firestore';
 import { motion } from 'motion/react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { UserProfile } from '../AuthContext';
+import { useAuth, UserProfile } from '../AuthContext';
+import type { MatchRecord } from '../types';
+import { getMatchHistory, BOT_DIFFICULTY_LABELS, BOT_DIFFICULTY_COLORS, cn } from '../utils';
 
 export default function ProfilePage() {
   const { uid } = useParams<{ uid: string }>();
   const navigate = useNavigate();
+  const { user, profile: authProfile } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<MatchRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      if (!uid) return;
-      try {
-        const docRef = doc(db, 'users', uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setProfile(docSnap.data() as UserProfile);
-        }
-
-        const q = query(
-          collection(db, 'match_records'),
-          or(
-            where('player_x', '==', uid),
-            where('player_o', '==', uid)
-          ),
-          limit(50)
-        );
-        const historySnap = await getDocs(q);
-        const docs = historySnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-        docs.sort((a, b) => b.created_at - a.created_at);
-        setHistory(docs.slice(0, 20));
-      } catch (error) {
-        console.error("Error fetching profile:", error);
-      } finally {
-        setLoading(false);
+    if (!uid) return;
+    // Load profile from localStorage via AuthContext for own profile,
+    // or from the stored users list for any uid
+    try {
+      const raw = localStorage.getItem('sttt_users');
+      if (raw) {
+        const users: Array<{ uid: string; profile: UserProfile | null }> = JSON.parse(raw);
+        const found = users.find(u => u.uid === uid);
+        if (found?.profile) setProfile(found.profile);
       }
-    };
-    fetchProfile();
+      setHistory(getMatchHistory(uid));
+    } finally {
+      setLoading(false);
+    }
   }, [uid]);
+
+  // Keep own profile in sync with auth context
+  useEffect(() => {
+    if (uid === user?.uid && authProfile) setProfile(authProfile);
+  }, [authProfile, uid, user?.uid]);
 
   if (loading) {
     return <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">Loading profile...</div>;
@@ -119,24 +111,45 @@ export default function ProfilePage() {
           ) : (
             <div className="divide-y divide-slate-700/50">
               {history.map((match) => {
-                const isWinner = match.winner === uid;
+                const isPlayerX = match.player_x === uid;
+                const myRole = isPlayerX ? 'X' : 'O';
+                const isWinner = match.winner === myRole;
                 const isDraw = match.winner === 'Draw';
                 const resultColor = isWinner ? 'text-emerald-400' : isDraw ? 'text-slate-400' : 'text-red-400';
+                const resultBg = isWinner ? 'bg-emerald-500/10 border-emerald-500/30' : isDraw ? 'bg-slate-700/30 border-slate-600' : 'bg-red-500/10 border-red-500/30';
                 const resultText = isWinner ? 'Won' : isDraw ? 'Draw' : 'Lost';
-                const opponentName = match.player_x === uid ? match.player_o_name : match.player_x_name;
-                
+                const diffLabel = match.botDifficulty ? BOT_DIFFICULTY_LABELS[match.botDifficulty] : '';
+                const diffColor = match.botDifficulty ? BOT_DIFFICULTY_COLORS[match.botDifficulty] : '';
+
                 return (
-                  <div key={match.id} className="p-4 hover:bg-slate-700/30 transition-colors flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-lg flex items-center justify-center font-bold bg-slate-900 border border-slate-700 ${resultColor}`}>
+                  <div key={match.id} className="p-4 hover:bg-slate-700/30 transition-colors flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className={`w-12 h-12 rounded-lg flex items-center justify-center font-bold border shrink-0 ${resultColor} ${resultBg}`}>
                         {resultText[0]}
                       </div>
-                      <div>
-                        <div className="font-bold text-white">vs {opponentName || 'Bot'}</div>
-                        <div className="text-xs text-slate-400 font-mono">{new Date(match.created_at).toLocaleDateString()}</div>
+                      <div className="min-w-0">
+                        {match.isBotMatch ? (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-lg leading-none">🤖</span>
+                            <span className="font-bold text-white">Computer</span>
+                            {diffLabel && (
+                              <span className={cn('text-xs px-1.5 py-0.5 rounded border font-semibold', diffColor)}>
+                                {diffLabel}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="text-base leading-none">👤</span>
+                            <span className="font-bold text-white truncate">
+                              vs {isPlayerX ? match.player_o_name : match.player_x_name || 'Player'}
+                            </span>
+                          </div>
+                        )}
+                        <div className="text-xs text-slate-400 font-mono mt-0.5">{new Date(match.created_at).toLocaleDateString()}</div>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       <div className="text-sm font-medium text-slate-300">{match.moves_count} moves</div>
                       <div className="text-xs text-slate-500 capitalize">{match.status}</div>
                     </div>
