@@ -6,13 +6,15 @@ interface SuperBoardProps {
   playerRole: 'X' | 'O' | 'Spectator' | null;
   hintMove: Move | null;
   onCellClick: (superIdx: number, subIdx: number) => void;
+  lastMove?: Move | null;
+  bestMove?: Move | null;
 }
 
 /**
  * The 3x3 grid of sub-boards that makes up the super tic-tac-toe game.
  * Pure rendering component — all state management is handled by the parent.
  */
-export default function SuperBoard({ gameState, playerRole, hintMove, onCellClick }: SuperBoardProps) {
+export default function SuperBoard({ gameState, playerRole, hintMove, onCellClick, lastMove, bestMove }: SuperBoardProps) {
   return (
     <div
       id="super-board"
@@ -37,6 +39,8 @@ export default function SuperBoard({ gameState, playerRole, hintMove, onCellClic
             subWinner={subWinner}
             hintMove={hintMove}
             onCellClick={onCellClick}
+            lastMove={lastMove}
+            bestMove={bestMove}
           />
         );
       })}
