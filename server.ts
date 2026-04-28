@@ -174,7 +174,8 @@ async function startServer() {
                   player_x: currentGame.players.X,
                   player_o: currentGame.players.O,
                   isBotMatch: currentGame.isBotMatch || false,
-                  moves_count: newState.moves.length
+                  moves_count: newState.moves.length,
+                  botDifficulty: currentGame.botDifficulty
                 }
               });
               activeGames.delete(matchId);
@@ -248,6 +249,7 @@ async function startServer() {
             player_x: game.players.X,
             player_o: game.players.O,
             isBotMatch: game.isBotMatch || false,
+            botDifficulty: game.botDifficulty,
             moves_count: newState.moves.length
           }
         });
@@ -283,6 +285,7 @@ async function startServer() {
             player_x: game.players.X,
             player_o: game.players.O,
             isBotMatch: game.isBotMatch || false,
+            botDifficulty: game.botDifficulty,
             moves_count: game.state.moves.length
           }
         });
@@ -314,6 +317,7 @@ async function startServer() {
             player_x: game.players.X,
             player_o: game.players.O,
             isBotMatch: game.isBotMatch || false,
+            botDifficulty: game.botDifficulty,
             moves_count: game.state.moves.length
           }
         });
