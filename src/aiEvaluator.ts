@@ -1,4 +1,4 @@
-import type { GameState, Move, AccuracyResult } from './types';
+import type { GameState, Move, AccuracyResult, MoveAccuracyLog, CoachComment } from './types';
 import { checkWinner, applyMoveFast } from './gameLogic';
 import { moveToKey } from './utils';
 
@@ -327,6 +327,86 @@ export function getBestMove(state: GameState, difficulty: number = 3): Move | nu
  */
 export function getEvaluation(state: GameState): number {
   return evaluateBoard(state, 'X');
+}
+
+// ============================================================
+// Coach Explanation
+// ============================================================
+
+const CELL_NAMES = [
+  'top-left', 'top-center', 'top-right',
+  'middle-left', 'center', 'middle-right',
+  'bottom-left', 'bottom-center', 'bottom-right',
+];
+
+const BOARD_NAMES = [
+  'top-left board', 'top-center board', 'top-right board',
+  'middle-left board', 'center board', 'middle-right board',
+  'bottom-left board', 'bottom-center board', 'bottom-right board',
+];
+
+function describeMove(move: Move): string {
+  return `${CELL_NAMES[move.subGridIndex]} of the ${BOARD_NAMES[move.superGridIndex]}`;
+}
+
+/**
+ * Generate human-readable coach commentary for a move from the accuracy log.
+ * @param log - The move accuracy log entry
+ * @param bestMove - The best move found (may equal actual move)
+ */
+export function getCoachText(log: MoveAccuracyLog, bestMove: Move | null): CoachComment {
+  const { label, delta, move } = log;
+  const actualDesc = describeMove(move);
+  const bestDesc = bestMove ? describeMove(bestMove) : null;
+
+  const isSameAsBest =
+    bestMove &&
+    bestMove.superGridIndex === move.superGridIndex &&
+    bestMove.subGridIndex === move.subGridIndex;
+
+  switch (label) {
+    case 'Forced':
+      return {
+        headline: 'Forced Move',
+        detail: `Only one legal move was available here — ${actualDesc}. No choice to be made.`,
+        bestMoveDescription: null,
+      };
+
+    case 'Best Move':
+      return {
+        headline: 'Best Move!',
+        detail: `Playing the ${actualDesc} was the strongest option. It maximizes board control and keeps your opponent under pressure. Well played!`,
+        bestMoveDescription: null,
+      };
+
+    case 'Good Move':
+      return {
+        headline: 'Good Move',
+        detail: `Solid play! Your move to the ${actualDesc} is good, but the optimal line was the ${bestDesc}. That move scores ~${delta} points better, giving slightly tighter control over which boards your opponent can play in.`,
+        bestMoveDescription: isSameAsBest ? null : bestDesc,
+      };
+
+    case 'Inaccuracy':
+      return {
+        headline: 'Inaccuracy',
+        detail: `You played the ${actualDesc}, but the ${bestDesc} was significantly stronger (about ${delta} points better). Your move lets the opponent gain ground — consider what sub-board you're sending them to next.`,
+        bestMoveDescription: isSameAsBest ? null : bestDesc,
+      };
+
+    case 'Blunder':
+      return {
+        headline: 'Blunder!',
+        detail: `Playing the ${actualDesc} was a serious mistake — roughly ${delta} points lost. The correct move was the ${bestDesc}. This error likely gave your opponent a winning opportunity or let them take a crucial sub-board.`,
+        bestMoveDescription: isSameAsBest ? null : bestDesc,
+      };
+
+    default:
+      return {
+        headline: 'Move Analyzed',
+        detail: `You played the ${actualDesc}.`,
+        bestMoveDescription: isSameAsBest ? null : bestDesc,
+      };
+  }
 }
 
 /**
