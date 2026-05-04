@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth, UserProfile } from '../AuthContext';
 import type { MatchRecord } from '../types';
 import { getMatchHistory, BOT_DIFFICULTY_LABELS, BOT_DIFFICULTY_COLORS, cn } from '../utils';
@@ -149,9 +149,17 @@ export default function ProfilePage() {
                         <div className="text-xs text-slate-400 font-mono mt-0.5">{new Date(match.created_at).toLocaleDateString()}</div>
                       </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-sm font-medium text-slate-300">{match.moves_count} moves</div>
-                      <div className="text-xs text-slate-500 capitalize">{match.status}</div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <div className="text-sm font-medium text-slate-300">{match.moves_count} moves</div>
+                        <div className="text-xs text-slate-500 capitalize">{match.status}</div>
+                      </div>
+                      <Link
+                        to={`/review/${match.id}`}
+                        className="px-3 py-1.5 bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 border border-violet-500/20 rounded-lg text-xs font-medium transition-colors whitespace-nowrap"
+                      >
+                        Review
+                      </Link>
                     </div>
                   </div>
                 );
