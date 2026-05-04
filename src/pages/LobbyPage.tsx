@@ -224,6 +224,7 @@ export default function LobbyPage() {
                     <th className="p-4 font-medium hidden sm:table-cell">Moves</th>
                     <th className="p-4 font-medium hidden md:table-cell">Status</th>
                     <th className="p-4 font-medium hidden sm:table-cell">Date</th>
+                    <th className="p-4 font-medium"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700/50">
@@ -272,6 +273,14 @@ export default function LobbyPage() {
                           <td className="p-4 text-slate-300 font-mono hidden sm:table-cell">{match.moves_count}</td>
                           <td className="p-4 text-slate-300 capitalize hidden md:table-cell">{match.status}</td>
                           <td className="p-4 text-slate-400 font-mono text-sm hidden sm:table-cell">{formatDate(match.created_at)}</td>
+                          <td className="p-4">
+                            <Link
+                              to={`/review/${match.id}`}
+                              className="px-3 py-1.5 bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 border border-violet-500/20 rounded-lg text-xs font-medium transition-colors whitespace-nowrap"
+                            >
+                              Review
+                            </Link>
+                          </td>
                         </tr>
                       );
                     })
