@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../AuthContext';
+import { useAuth, saveLocalProfile } from '../AuthContext';
 import { useSocket } from '../hooks/useSocket';
 import { useGameState } from '../hooks/useGameState';
 import SuperBoard from '../components/SuperBoard';
@@ -67,7 +67,6 @@ export default function GameRoomPage() {
     const { winner, matchDetails } = gameOverData;
 
     try {
-      const { saveLocalProfile } = require('../AuthContext');
       const isPlayerX = matchDetails.player_x === user.uid;
       const isPlayerO = matchDetails.player_o === user.uid;
 
@@ -76,28 +75,29 @@ export default function GameRoomPage() {
         const isDraw = winner === 'Draw';
         const isLoser = !isWinner && !isDraw;
 
-        let eloChange = isWinner ? 15 : isDraw ? 0 : -15;
+        const eloChange = matchDetails.isBotMatch ? 0 : (isWinner ? 15 : isDraw ? 0 : -15);
         const newElo = Math.max(0, profile.elo_rating + eloChange);
 
-        // Calculate accuracy from log
-        let myAccuracy = 0;
-        const myRole = isPlayerX ? 'X' : 'O';
-        const myMoves = accuracyLogRef.current.filter(log => log.move.player === myRole);
-        if (myMoves.length > 0) {
-          const totalDelta = myMoves.reduce((sum, log) => sum + Math.max(0, 1000 - Math.abs(log.delta)), 0);
-          myAccuracy = Math.round((totalDelta / (myMoves.length * 1000)) * 100);
+        let newAvgAccuracy = profile.avg_accuracy;
+        if (!matchDetails.isBotMatch) {
+          let myAccuracy = 0;
+          const myRole = isPlayerX ? 'X' : 'O';
+          const myMoves = accuracyLogRef.current.filter(log => log.move.player === myRole);
+          if (myMoves.length > 0) {
+            const totalDelta = myMoves.reduce((sum, log) => sum + Math.max(0, 1000 - Math.abs(log.delta)), 0);
+            myAccuracy = Math.round((totalDelta / (myMoves.length * 1000)) * 100);
+          }
+          newAvgAccuracy = Math.round(
+            ((profile.avg_accuracy * profile.matches_played) + myAccuracy) / (profile.matches_played + 1)
+          );
         }
-
-        const newAvgAccuracy = Math.round(
-          ((profile.avg_accuracy * profile.matches_played) + myAccuracy) / (profile.matches_played + 1)
-        );
 
         const updatedProfile = {
           ...profile,
-          matches_played: profile.matches_played + 1,
-          wins: profile.wins + (isWinner ? 1 : 0),
-          losses: profile.losses + (isLoser ? 1 : 0),
-          draws: profile.draws + (isDraw ? 1 : 0),
+          matches_played: matchDetails.isBotMatch ? profile.matches_played : profile.matches_played + 1,
+          wins: matchDetails.isBotMatch ? profile.wins : profile.wins + (isWinner ? 1 : 0),
+          losses: matchDetails.isBotMatch ? profile.losses : profile.losses + (isLoser ? 1 : 0),
+          draws: matchDetails.isBotMatch ? profile.draws : profile.draws + (isDraw ? 1 : 0),
           elo_rating: newElo,
           avg_accuracy: newAvgAccuracy,
         };
