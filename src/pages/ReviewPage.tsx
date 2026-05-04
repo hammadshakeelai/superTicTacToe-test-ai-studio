@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../utils';
@@ -159,6 +159,17 @@ export default function ReviewPage() {
     setBranchIndex(0);
   }
 
+  // ── keyboard navigation ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); goToPrev(); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); goToNext(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [goToPrev, goToNext]);
+
   // ── branch / self-review ─────────────────────────────────────────────────
 
   const handleBranchMove = useCallback((superIdx: number, subIdx: number) => {
@@ -177,10 +188,6 @@ export default function ReviewPage() {
       setBranchIndex(newBranch.length);
     }
   }, [displayState, isBranching, branchMoves, branchIndex]);
-
-  // ── keyboard navigation ──────────────────────────────────────────────────
-
-  // (handled via buttons; keyboard left/right could be added later)
 
   if (!record) {
     return (
